@@ -1,8 +1,9 @@
 import streamlit as st
 import qrcode
-from PIL import Image, ImageDraw
+from PIL import Image
 import cv2
 import numpy as np
+from io import BytesIO  # Import BytesIO here
 
 # Function to generate a QR code
 def generate_qr_code(data, fill_color="black", back_color="white"):
@@ -17,17 +18,24 @@ def generate_qr_code(data, fill_color="black", back_color="white"):
     qr_img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
     return qr_img
 
-# Function to blend image into the QR code matrix
+# Function to blend image into the QR code using OpenCV
 def blend_image_with_qr(qr_img, user_img):
     qr_img = qr_img.convert("RGBA")
-    user_img = user_img.convert("RGBA")
 
-    # Resize user image to fit into the QR code
-    user_img = user_img.resize(qr_img.size)
+    # Convert QR code and user image to OpenCV format (numpy array)
+    qr_array = np.array(qr_img)
+    user_img = cv2.cvtColor(np.array(user_img), cv2.COLOR_RGB2RGBA)
 
-    # Blend the images together (adjust the alpha for balance)
-    blended = Image.blend(qr_img, user_img, alpha=0.4)
-    return blended
+    # Resize user image to fit the QR code
+    user_img_resized = cv2.resize(user_img, (qr_array.shape[1], qr_array.shape[0]))
+
+    # Blend the images (adjust the weight for blending)
+    blended = cv2.addWeighted(user_img_resized, 0.4, qr_array, 0.6, 0)
+
+    # Convert back to PIL for display in Streamlit
+    blended_img = Image.fromarray(blended)
+
+    return blended_img
 
 # Streamlit app
 st.title("Custom QR Code with Integrated Image")
@@ -50,7 +58,7 @@ if st.button("Generate QR Code") and qr_data and uploaded_image:
     # Open the uploaded image
     user_img = Image.open(uploaded_image)
 
-    # Blend the image with the QR code
+    # Blend the image with the QR code using OpenCV
     final_qr = blend_image_with_qr(qr_img, user_img)
 
     # Display the QR code with integrated image
