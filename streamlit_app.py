@@ -1,86 +1,69 @@
 import streamlit as st
 import qrcode
-from PIL import Image, ImageDraw, ImageFilter
-from io import BytesIO
+from PIL import Image, ImageDraw
+import cv2
+import numpy as np
 
-# Function to generate a basic QR code without blending
-def generate_qr_code(data, box_size=10, border=4):
+# Function to generate a QR code
+def generate_qr_code(data, fill_color="black", back_color="white"):
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=box_size,
-        border=border,
+        box_size=10,
+        border=4,
     )
     qr.add_data(data)
     qr.make(fit=True)
-
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGBA')
+    qr_img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
     return qr_img
 
-# Function to pixelate the background image
-def pixelate_image(image, pixel_size=10):
-    # Resize down and then resize back up to create a pixelated effect
-    image_small = image.resize(
-        (image.size[0] // pixel_size, image.size[1] // pixel_size),
-        resample=Image.NEAREST
-    )
-    return image_small.resize(image.size, Image.NEAREST)
+# Function to blend image into the QR code matrix
+def blend_image_with_qr(qr_img, user_img):
+    qr_img = qr_img.convert("RGBA")
+    user_img = user_img.convert("RGBA")
 
-# Function to blend pixelated background with QR code
-def blend_qr_with_background(qr_img, background_img, blend_alpha=0.6):
-    # Resize the QR code to match the background size
-    qr_img = qr_img.resize(background_img.size)
+    # Resize user image to fit into the QR code
+    user_img = user_img.resize(qr_img.size)
 
-    # Blend the QR code and the background
-    blended = Image.blend(background_img, qr_img, alpha=blend_alpha)
-    
+    # Blend the images together (adjust the alpha for balance)
+    blended = Image.blend(qr_img, user_img, alpha=0.4)
     return blended
 
 # Streamlit app
-st.title('Advanced QR Code Generator with Pixelated Background')
+st.title("Custom QR Code with Integrated Image")
 
-# Input for QR code data (e.g., link)
-qr_data = st.text_input('Enter the URL or text for the QR code:', 'https://example.com')
+# Input for QR code data
+qr_data = st.text_input("Enter the URL or text for the QR code:", "https://example.com")
 
-# Upload the background image
-uploaded_image = st.file_uploader("Upload a background image", type=["png", "jpg", "jpeg"])
+# Upload image
+uploaded_image = st.file_uploader("Upload an image to integrate", type=["png", "jpg", "jpeg"])
 
-# Set QR code options
-box_size = st.slider('QR Code Box Size', min_value=5, max_value=20, value=10)
-border_size = st.slider('QR Code Border Size', min_value=1, max_value=10, value=4)
+# Set colors
+fill_color = st.color_picker("QR Code Color", "#000000")
+back_color = st.color_picker("Background Color", "#FFFFFF")
 
-# Set pixelation options
-pixel_size = st.slider('Pixelation Level (lower is more pixelated)', min_value=5, max_value=50, value=10)
+# Generate QR code when data and image are provided
+if st.button("Generate QR Code") and qr_data and uploaded_image:
+    # Generate the QR code
+    qr_img = generate_qr_code(qr_data, fill_color=fill_color, back_color=back_color)
+    
+    # Open the uploaded image
+    user_img = Image.open(uploaded_image)
 
-# Set blending options
-blend_alpha = st.slider('QR Code Blending Alpha (0 = full image, 1 = full QR code)', min_value=0.0, max_value=1.0, value=0.6)
+    # Blend the image with the QR code
+    final_qr = blend_image_with_qr(qr_img, user_img)
 
-# Generate QR code when button is clicked
-if st.button('Generate QR Code') and qr_data and uploaded_image:
-    # Open the background image
-    background_img = Image.open(uploaded_image).convert("RGBA")
+    # Display the QR code with integrated image
+    st.image(final_qr, caption="QR Code with Integrated Image")
 
-    # Pixelate the background image
-    pixelated_background = pixelate_image(background_img, pixel_size)
-
-    # Generate QR code
-    qr_img = generate_qr_code(qr_data, box_size, border_size)
-
-    # Blend the pixelated background with the QR code
-    final_image = blend_qr_with_background(qr_img, pixelated_background, blend_alpha)
-
-    # Display the final image with QR code
-    st.image(final_image)
-
-    # Prepare the image for download
+    # Provide download option
     buf = BytesIO()
-    final_image.save(buf, format="PNG")
+    final_qr.save(buf, format="PNG")
     byte_im = buf.getvalue()
 
-    # Download button
     st.download_button(
-        label="Download QR Code with Pixelated Background",
+        label="Download QR Code",
         data=byte_im,
-        file_name="pixelated_qr_code.png",
+        file_name="custom_qr_code.png",
         mime="image/png"
     )
